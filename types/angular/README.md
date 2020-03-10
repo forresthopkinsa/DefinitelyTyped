@@ -1,5 +1,7 @@
 # AngularJS Definitions Usage Notes
 
+The below instructions have not been updated for usage of this fork.
+
 ## Referencing AngularJS definition files in your code
 
 Read the [TypeScript handbook](https://www.typescriptlang.org/docs/handbook/declaration-files/consumption.html) for details on consuming these type definitions.

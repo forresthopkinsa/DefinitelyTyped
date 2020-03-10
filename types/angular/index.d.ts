@@ -1,4 +1,4 @@
-// Type definitions for Angular JS 1.6
+// Type definitions for Angular JS 1.5
 // Project: http://angularjs.org
 // Definitions by: Diego Vilar <https://github.com/diegovilar>
 //                 Georgii Dolzhykov <https://github.com/thorn0>
@@ -18,6 +18,14 @@ declare global {
         $inject?: ReadonlyArray<string>;
     }
 }
+
+// Exclude index signatures, leaving only absolute keys
+// Adapted from https://github.com/Microsoft/TypeScript/issues/25987#issuecomment-408339599
+type ValuesOf<T> = T extends { [K in keyof T]: infer U } ? ({} extends U ? never : U) : never;
+type MapToKnown<T> = {
+    [K in keyof T]: string extends K ? never : number extends K ? never : K;
+};
+type KnownKeys<T> = ValuesOf<MapToKnown<T>>;
 
 export as namespace angular;
 export as namespace ng;
@@ -240,8 +248,8 @@ declare namespace angular {
          * @param name Name of the directive in camel-case (i.e. ngBind which will match as ng-bind)
          * @param directiveFactory An injectable directive factory function.
          */
-        directive<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController>(name: string, directiveFactory: Injectable<IDirectiveFactory<TScope, TElement, TAttributes, TController>>): IModule;
-        directive<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController>(object: {[directiveName: string]: Injectable<IDirectiveFactory<TScope, TElement, TAttributes, TController>>}): IModule;
+        directive<TController extends IDirectiveController = IController, TScope extends IScope = IScope, TAttributes extends IAttributes = IAttributes, TElement extends JQLite = JQLite>(name: string, directiveFactory: Injectable<IDirectiveFactory<TController, TScope, TAttributes, TElement>>): IModule;
+        directive<TController extends IDirectiveController = IController, TScope extends IScope = IScope, TAttributes extends IAttributes = IAttributes, TElement extends JQLite = JQLite>(object: {[directiveName: string]: Injectable<IDirectiveFactory<TController, TScope, TAttributes, TElement>>}): IModule;
 
         /**
          * Register a service factory, which will be called to return the service instance. This is short for registering a service where its provider consists of only a $get property, which is the given service factory function. You should use $provide.factory(getFn) if you do not need to configure your service in a provider.
@@ -465,6 +473,8 @@ declare namespace angular {
      * see https://docs.angularjs.org/api/ng/type/$rootScope.Scope and https://docs.angularjs.org/api/ng/service/$rootScope
      */
     interface IRootScopeService {
+        [index: string]: any;
+
         $apply(): any;
         $apply(exp: string): any;
         $apply(exp: (scope: IScope) => any): any;
@@ -610,6 +620,10 @@ declare namespace angular {
     }
 
     interface IScope extends IRootScopeService { }
+
+    // Given a type extending IScope, narrow it down to only its own specified properties, and return a string union of them
+    // If the given type is IRootScopeService or IScope itself, return string type
+    type IKnownScope<T extends IScope> = IScope extends T ? string : Exclude<KnownKeys<T>, keyof IRootScopeService>;
 
     /**
      * $scope for ngRepeat directive.
@@ -1114,6 +1128,7 @@ declare namespace angular {
          *
          * @param promises A hash of promises.
          */
+        all(promises: { [id: string]: IPromise<any>; }): IPromise<{ [id: string]: any; }>;
         all<T>(promises: { [K in keyof T]: (IPromise<T[K]> | T[K]); }): IPromise<T>;
         /**
          * Creates a Deferred object which represents a task which will finish in the future.
@@ -1361,8 +1376,8 @@ declare namespace angular {
     }
 
     interface ICompileProvider extends IServiceProvider {
-        directive<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController>(name: string, directiveFactory: Injectable<IDirectiveFactory<TScope, TElement, TAttributes, TController>>): ICompileProvider;
-        directive<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController>(object: {[directiveName: string]: Injectable<IDirectiveFactory<TScope, TElement, TAttributes, TController>>}): ICompileProvider;
+        directive<TController extends IDirectiveController = IController, TScope extends IScope = IScope, TAttributes extends IAttributes = IAttributes, TElement extends JQLite = JQLite>(name: string, directiveFactory: Injectable<IDirectiveFactory<TController, TScope, TAttributes, TElement>>): ICompileProvider;
+        directive<TController extends IDirectiveController = IController, TScope extends IScope = IScope, TAttributes extends IAttributes = IAttributes, TElement extends JQLite = JQLite>(object: {[directiveName: string]: Injectable<IDirectiveFactory<TController, TScope, TAttributes, TElement>>}): ICompileProvider;
 
         component(name: string, options: IComponentOptions): ICompileProvider;
         component(object: {[componentName: string]: IComponentOptions}): ICompileProvider;
@@ -1988,10 +2003,6 @@ declare namespace angular {
          * different in Angular 1 there is no direct mapping and care should be taken when upgrading.
          */
         $postLink?(): void;
-
-        // IController implementations frequently do not implement any of its methods.
-        // A string indexer indicates to TypeScript not to issue a weak type error in this case.
-        [s: string]: any;
     }
 
     /**
@@ -2083,26 +2094,26 @@ declare namespace angular {
 
     type IDirectiveController = IController | IController[] | {[key: string]: IController};
 
-    interface IDirectiveFactory<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController> {
-        (...args: any[]): IDirective<TScope, TElement, TAttributes, TController> | IDirectiveLinkFn<TScope, TElement, TAttributes, TController>;
+    interface IDirectiveFactory<TController extends IDirectiveController, TScope extends IScope, TAttributes extends IAttributes, TElement extends JQLite> {
+        (...args: any[]): IDirective<TController, TScope, TAttributes, TElement> | IDirectiveLinkFn<TController, TScope, TAttributes, TElement>;
     }
 
-    interface IDirectiveLinkFn<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController> {
+    interface IDirectiveLinkFn<TController extends IDirectiveController, TScope extends IScope, TAttributes extends IAttributes, TElement extends JQLite> {
         (
             scope: TScope,
             instanceElement: TElement,
             instanceAttributes: TAttributes,
-            controller?: TController,
+            controller: TController,
             transclude?: ITranscludeFunction
         ): void;
     }
 
-    interface IDirectivePrePost<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController> {
-        pre?: IDirectiveLinkFn<TScope, TElement, TAttributes, TController>;
-        post?: IDirectiveLinkFn<TScope, TElement, TAttributes, TController>;
+    interface IDirectivePrePost<TController extends IDirectiveController, TScope extends IScope, TAttributes extends IAttributes, TElement extends JQLite> {
+        pre?: IDirectiveLinkFn<TController, TScope, TAttributes, TElement>;
+        post?: IDirectiveLinkFn<TController, TScope, TAttributes, TElement>;
     }
 
-    interface IDirectiveCompileFn<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController> {
+    interface IDirectiveCompileFn<TController extends IDirectiveController, TScope extends IScope, TAttributes extends IAttributes, TElement extends JQLite> {
         (
             templateElement: TElement,
             templateAttributes: TAttributes,
@@ -2113,11 +2124,11 @@ declare namespace angular {
              * that is passed to the link function instead.
              */
             transclude: ITranscludeFunction
-        ): void | IDirectiveLinkFn<TScope, TElement, TAttributes, TController> | IDirectivePrePost<TScope, TElement, TAttributes, TController>;
+        ): void | IDirectiveLinkFn<TController, TScope, TAttributes, TElement> | IDirectivePrePost<TController, TScope, TAttributes, TElement>;
     }
 
-    interface IDirective<TScope extends IScope = IScope, TElement extends JQLite = JQLite, TAttributes extends IAttributes = IAttributes, TController extends IDirectiveController = IController> {
-        compile?: IDirectiveCompileFn<TScope, TElement, TAttributes, TController>;
+    interface IDirective<TController extends IDirectiveController = IController, TScope extends IScope = IScope, TAttributes extends IAttributes = IAttributes, TElement extends JQLite = JQLite> {
+        compile?: IDirectiveCompileFn<TController, TScope, TAttributes, TElement>;
         controller?: string | Injectable<IControllerConstructor>;
         controllerAs?: string;
         /**
@@ -2126,7 +2137,7 @@ declare namespace angular {
          * relies upon bindings inside a $onInit method on the controller, instead.
          */
         bindToController?: boolean | {[boundProperty: string]: string};
-        link?: IDirectiveLinkFn<TScope, TElement, TAttributes, TController> | IDirectivePrePost<TScope, TElement, TAttributes, TController>;
+        link?: IDirectiveLinkFn<TController, TScope, TAttributes, TElement> | IDirectivePrePost<TController, TScope, TAttributes, TElement>;
         multiElement?: boolean;
         priority?: number;
         /**
@@ -2135,7 +2146,7 @@ declare namespace angular {
         replace?: boolean;
         require?: string | string[] | {[controller: string]: string};
         restrict?: string;
-        scope?: boolean | {[boundProperty: string]: string};
+        scope?: boolean | {[TProperty in IKnownScope<TScope>]?: string};
         template?: string | ((tElement: TElement, tAttrs: TAttributes) => string);
         templateNamespace?: string;
         templateUrl?: string | ((tElement: TElement, tAttrs: TAttributes) => string);
